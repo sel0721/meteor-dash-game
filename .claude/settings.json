@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/choeseli/Desktop/@@@개인파일/AI/클로드/02_게임/.claude/hooks/auto-preview.sh",
+            "statusMessage": "브라우저 미리보기 여는 중..."
+          },
+          {
+            "type": "command",
+            "command": "/Users/choeseli/Desktop/@@@개인파일/AI/클로드/02_게임/.claude/hooks/check-js-syntax.sh",
+            "statusMessage": "JS 문법 확인 중..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/choeseli/Desktop/@@@개인파일/AI/클로드/02_게임/.claude/hooks/guard-canvas-size.py",
+            "statusMessage": "캔버스 크기 변경 확인 중..."
+          },
+          {
+            "type": "command",
+            "command": "/Users/choeseli/Desktop/@@@개인파일/AI/클로드/02_게임/.claude/hooks/guard-storage-keys.py",
+            "statusMessage": "localStorage 키 변경 확인 중..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/choeseli/Desktop/@@@개인파일/AI/클로드/02_게임/.claude/hooks/auto-deploy.sh",
+            "statusMessage": "변경사항 자동 배포 중...",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

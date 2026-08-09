@@ -4,13 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single self-contained HTML file (`meteor-dash.html`) implementing "메테오 대시" (Meteor Dash), a browser-based canvas arcade game in a retro pixel-art style. There is no build system, package manager, bundler, or test suite — all HTML, CSS, and JavaScript live inline in the one file, including two embedded pixel fonts (base64 data URIs).
+A single self-contained HTML file (`meteor-dash.html`) implementing "메테오 대시" (Meteor Dash), a browser-based canvas arcade game in a retro pixel-art style. There is no build system, package manager, bundler, or test suite for the game itself — all HTML, CSS, and JavaScript live inline in the one file, including two embedded pixel fonts (base64 data URIs).
+
+The repo also contains `meteor-dash-promo/`, a separate Remotion project (its own `package.json`, TypeScript, npm-installed dependencies) that renders a short vertical promo video for the game. It is unrelated to the game's runtime — see its own section below.
 
 ## Running the game
 
 Open `meteor-dash.html` directly in a browser (double-click, or `open meteor-dash.html` on macOS). No dev server, install step, or compilation is required.
 
-There are no lint, build, or test commands in this repo.
+`index.html` at the repo root is a one-line meta-refresh redirect to `meteor-dash.html` — it exists only so GitHub Pages (which serves `index.html` from the root) lands visitors on the game. It has no other purpose and isn't part of the game itself.
+
+There are no lint, build, or test commands for the game.
+
+## Claude Code hooks (`.claude/settings.json`, `.claude/hooks/`)
+
+This repo has project-level hooks that run automatically — they aren't optional conventions, they actually execute:
+
+- **PostToolUse on Edit|Write**: after any edit, `auto-preview.sh` opens `meteor-dash.html` in the default browser if that's the file touched; `check-js-syntax.sh` extracts the inline `<script>` block and parses it with `new Function()` (parse-only, never executed) — a real syntax error returns `{"decision":"block","reason":...}` so it comes back to you in-turn instead of silently shipping broken JS.
+- **PreToolUse on Edit**: `guard-canvas-size.py` asks for confirmation if an edit would remove/change the exact line `const LW = 96, LH = 150;` (the pixel-art rendering depends on this); `guard-storage-keys.py` does the same if an edit would change the literal strings `meteor-dash-best` or `meteor-dash-scores` (renaming either orphans every existing player's saved score).
+- **Stop**: `auto-deploy.sh` runs the same JS-syntax check first — if it fails, it skips deploying and just reports why — otherwise it `git add -A && git commit && git push`s any changes, which GitHub Pages picks up automatically. This means **ending a session with working-directory changes publishes them** to the live game at `https://sel0721.github.io/meteor-dash-game/`. If you don't want that for a given change, commit nothing you don't want live, or ask the user before you stop.
+
+All five scripts live in `.claude/hooks/` and are plain bash/python reading the hook JSON payload from stdin — read them directly rather than guessing behavior from this summary if you need to change one.
+
+## Deployment
+
+The repo is public and deployed via GitHub Pages at `https://sel0721.github.io/meteor-dash-game/` (Pages is configured to serve from the `main` branch, root path). Pushing to `main` is enough to update the live site — GitHub rebuilds Pages automatically; there is no CI workflow file. Nothing sensitive is committed here: the Gemini API key used to generate the thumbnail lives in `~/.env` on the dev machine, outside the repo entirely.
 
 ## Architecture
 
@@ -41,3 +59,28 @@ The two `@font-face` `src` values are base64-encoded font files inlined directly
 ## Thumbnail assets
 
 `thumbnail.png` (500×500) is a promotional/listing image, downscaled from the AI-generated 2048×2048 source(s) kept in `썸네일이미지/`. Neither is referenced by `meteor-dash.html` — the game embeds its own fonts and draws everything on canvas, so these files have no effect on gameplay and only matter if you're updating cover art.
+
+## Promo video (`meteor-dash-promo/`)
+
+A [Remotion](https://remotion.dev) project that renders a 9.17s, 1080×1920 vertical promo video (`out/meteor-dash-promo.mp4`, also copied to the repo root as `meteor-dash-promo.mp4`). Run commands from inside `meteor-dash-promo/`:
+
+```
+npm i
+npx remotion studio    # live preview
+npx remotion render MeteorDashPromo out/meteor-dash-promo.mp4
+```
+
+- **Composition** (`src/Root.tsx`, `src/PromoVideo.tsx`): three scenes (`src/scenes/Scene1Hook.tsx`, `Scene2Features.tsx`, `Scene3CTA.tsx`) joined with `@remotion/transitions` fades. Each scene is also registered as its own `Composition` under a `Promo-Scenes` folder so it can be previewed/trimmed individually in Studio. Total duration (275 frames @ 30fps) and each scene's `durationInFrames` are kept inline on the `<Composition>`/`<TransitionSeries.Sequence>` tags per Remotion's interactivity conventions — don't extract them into constants.
+- **Fonts** (`src/fonts.ts`): `PixelEN` (Press Start 2P) loads via `@remotion/google-fonts`; `PixelKR` (the same Galmuri11-Bold used by the game) loads from `public/Galmuri11-Bold.woff2` via `@remotion/fonts`' `loadFont()`. Both must finish loading before text scenes render correctly — this is handled automatically by those loaders, not manually.
+- **Thumbnail reuse**: `public/thumbnail.png` is a copy of the root `thumbnail.png`. It's shown framed (not full-bleed/cropped) in Scene 1 and Scene 3 — the thumbnail already has "메테오 대시"/"SURVIVAL ARCADE" baked into its pixels, so stretching it as a full-screen zoomed background duplicates and blurs that text. Keep it framed at a size close to its native 500×500 if you touch these scenes.
+- **Music** (`public/chiptune.wav`): an original 8-bit chiptune generated procedurally (square/pulse/triangle-wave synthesis + noise percussion, no samples, no copyrighted material), timed to exactly match the video's 275-frame duration and structured around the three scenes (soft build → energetic main riff → decelerating resolve). The generator script itself is **not** checked into this repo (it was run from a scratch location); regenerating or tweaking the melody means rewriting an equivalent numpy synthesis script rather than editing an existing one here.
+
+### macOS ffmpeg gotcha
+
+`npx remotion render` on this machine (macOS 13, below Remotion's macOS 15 requirement) fails: the bundled `@remotion/compositor-darwin-arm64/ffmpeg` dynamically links `libavdevice.dylib`, which references an AVFoundation symbol (`_AVCaptureDeviceTypeContinuityCamera`) that doesn't exist before macOS 15, so it crashes with `SIGABRT` during the final video/audio stitch step (frame rendering itself completes fine — only the ffmpeg-dependent mux step fails). Homebrew's `ffmpeg` formula has no bottle for this OS and hangs/takes forever building from source (SVT-AV1's CMake `TryCompile` step got stuck at 68+ minutes CPU time and had to be killed) — don't reach for `brew install ffmpeg` here.
+
+The working fix, if this needs to be redone:
+1. Get a prebuilt static ffmpeg fast via `pip install imageio-ffmpeg` (in a venv) — its bundled binary is statically linked and runs fine on this OS.
+2. Build a custom binaries directory: copy the **entire** `node_modules/@remotion/compositor-darwin-arm64/` folder (the `remotion` compositor binary needs its sibling `.dylib`s present, resolved relative to its own directory) somewhere, then overwrite just `ffmpeg` in that copy with the imageio-ffmpeg static binary. Leave `ffprobe` as the original bundled one.
+3. Render with `--binaries-directory=<that folder>`.
+4. That swapped-in ffmpeg lacks `libfdk_aac` (Remotion's default AAC encoder choice), so also pass `--audio-codec=mp3` (maps to `libmp3lame`, which the static build does include) or the audio mux step will fail with "Unknown encoder 'libfdk_aac'".
